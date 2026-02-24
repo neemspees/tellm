@@ -13,7 +13,7 @@ A minimal macOS CLI tool that talks to Apple Intelligence on-device via the Foun
 **Homebrew:**
 
 ```bash
-brew tap neemspees/tellm
+brew tap neemspees/tellm https://github.com/neemspees/tellm
 brew install tellm
 ```
 

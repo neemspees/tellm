@@ -1,7 +1,7 @@
 class Tellm < Formula
   desc "Minimal macOS CLI for Apple Intelligence on-device LLM"
   homepage "https://github.com/neemspees/tellm"
-  url "https://github.com/neemspees/tellm/releases/download/VERSION/tellm-macos-arm64.tar.gz"
+  url "https://github.com/neemspees/tellm/releases/latest/download/tellm-macos-arm64.tar.gz"
   sha256 "SHA256"
   license "MIT"
 
