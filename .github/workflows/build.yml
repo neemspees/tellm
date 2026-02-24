@@ -25,19 +25,3 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" tellm-macos-arm64.tar.gz --generate-notes ||
           gh release upload "${{ github.ref_name }}" tellm-macos-arm64.tar.gz --clobber
-
-      - name: Update Homebrew formula
-        run: |
-          SHA=$(shasum -a 256 tellm-macos-arm64.tar.gz | awk '{print $1}')
-          REPO="${{ github.repository }}"
-          TAG="${{ github.ref_name }}"
-          sed -i '' "s|url \".*\"|url \"https://github.com/${REPO}/releases/download/${TAG}/tellm-macos-arm64.tar.gz\"|" Formula/tellm.rb
-          sed -i '' "s|homepage \".*\"|homepage \"https://github.com/${REPO}\"|" Formula/tellm.rb
-          sed -i '' "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/tellm.rb
-          sed -i '' "s|VERSION|${TAG}|g" Formula/tellm.rb
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout main
-          git add Formula/tellm.rb
-          git commit -m "Update formula for ${TAG}"
-          git push
