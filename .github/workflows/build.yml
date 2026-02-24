@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tellm
+          path: .build/release/tellm
+
+      - name: Package binary
+        if: startsWith(github.ref, 'refs/tags/')
+        run: tar -czf tellm-macos-arm64.tar.gz -C .build/release tellm
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" tellm-macos-arm64.tar.gz --generate-notes
+
+      - name: Update Homebrew formula
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          SHA=$(shasum -a 256 tellm-macos-arm64.tar.gz | awk '{print $1}')
+          REPO="${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+          sed -i '' "s|url \".*\"|url \"https://github.com/${REPO}/releases/download/${TAG}/tellm-macos-arm64.tar.gz\"|" Formula/tellm.rb
+          sed -i '' "s|homepage \".*\"|homepage \"https://github.com/${REPO}\"|" Formula/tellm.rb
+          sed -i '' "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/tellm.rb
+          sed -i '' "s|VERSION|${TAG}|g" Formula/tellm.rb
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout main
+          git add Formula/tellm.rb
+          git commit -m "Update formula for ${TAG}"
+          git push
