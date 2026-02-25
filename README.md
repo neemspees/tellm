@@ -54,6 +54,7 @@ cat error.log | tellm "What went wrong here?"
 
 | Flag | Short | Description |
 |---|---|---|
+| `--version` | | Print the current version |
 | `--instruction` | `-i` | Provide a prompt separately from piped input |
 | `--quiet` | `-q` | Suppress status messages (e.g. "Thinking...") |
 
