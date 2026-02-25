@@ -1,41 +1,71 @@
+import ArgumentParser
 import Foundation
 import FoundationModels
 
-private func parseArgs() -> (prompt: String, stdin: String?, quiet: Bool, verbose: Bool) {
-    var args = Array(CommandLine.arguments.dropFirst())
-    
-    let quiet = removeFlag(&args, long: "--quiet", short: "-q")
-    let verbose = removeFlag(&args, long: "--verbose", short: "-v")
-    let prompt = removeValueFlag(&args, long: "--instruction", short: "-i")
-        ?? args.joined(separator: " ")
-    
-    var stdinContent: String? = nil
-    if isatty(fileno(stdin)) == 0 {
-        stdinContent = readLine(strippingNewline: false).map { first in
-            var lines = [first]
-            while let line = readLine(strippingNewline: false) {
-                lines.append(line)
+@main
+struct Tellm: AsyncParsableCommand {
+    @Flag(name: [.long, .short], help: "Suppress status messages.")
+    var quiet = false
+
+    @Flag(name: [.long, .short], help: "Show extra progress info.")
+    var verbose = false
+
+    @Option(name: [.long, .short], help: "Instruction to apply to piped input.")
+    var instruction: String?
+
+    @Argument(help: "The prompt to send to the model.")
+    var words: [String] = []
+
+    mutating func run() async throws {
+        let model = SystemLanguageModel.default
+        let status = model.availability
+
+        switch status {
+        case .available:
+            let prompt = instruction ?? words.joined(separator: " ")
+            let stdinContent = readStdin()
+
+            guard !prompt.isEmpty || (stdinContent != nil && !stdinContent!.isEmpty) else {
+                print("Usage: tellm \"your prompt\"", to: &standardError)
+                print("       echo \"content\" | tellm -i \"your instruction\"", to: &standardError)
+                throw ExitCode.failure
             }
-            return lines.joined()
+
+            do {
+                if !quiet { print("🤖 Thinking...", to: &standardError) }
+                let output = try await respond(to: prompt, content: stdinContent, quiet: quiet, verbose: verbose)
+                print(output)
+            } catch {
+                print("❌ Generation Error: \(error)", to: &standardError)
+                throw ExitCode.failure
+            }
+
+        case .unavailable(let reason):
+            print("❌ Model Unavailable", to: &standardError)
+            print("Reason: \(String(describing: reason))", to: &standardError)
+            throw ExitCode.failure
+
+        @unknown default:
+            print("❓ Unknown availability status.", to: &standardError)
+            throw ExitCode.failure
         }
     }
-    
-    return (prompt, stdinContent, quiet, verbose)
 }
 
-private func removeFlag(_ args: inout [String], long: String, short: String) -> Bool {
-    guard let index = args.firstIndex(of: long) ?? args.firstIndex(of: short) else { return false }
-    args.remove(at: index)
-    return true
+// MARK: - Stdin
+
+private func readStdin() -> String? {
+    guard isatty(fileno(stdin)) == 0 else { return nil }
+    return readLine(strippingNewline: false).map { first in
+        var lines = [first]
+        while let line = readLine(strippingNewline: false) {
+            lines.append(line)
+        }
+        return lines.joined()
+    }
 }
 
-private func removeValueFlag(_ args: inout [String], long: String, short: String) -> String? {
-    guard let index = args.firstIndex(of: long) ?? args.firstIndex(of: short),
-          index + 1 < args.count else { return nil }
-    let value = args[index + 1]
-    args.removeSubrange(index...index + 1)
-    return value
-}
+// MARK: - Chunking
 
 private let chunkContentChars = 8_000
 
@@ -89,53 +119,11 @@ private func respond(to prompt: String, content: String?, quiet: Bool, verbose: 
     return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-// MARK: - Main
-
-@MainActor
-func runPrompt() async {
-    let model = SystemLanguageModel.default
-    let status = model.availability
-    
-    switch status {
-    case .available:
-        let (prompt, stdinContent, quiet, verbose) = parseArgs()
-        
-        guard !prompt.isEmpty || (stdinContent != nil && !stdinContent!.isEmpty) else {
-            print("Usage: tellm \"your prompt\"", to: &standardError)
-            print("       echo \"content\" | tellm -i \"your instruction\"", to: &standardError)
-            exit(1)
-        }
-        
-        do {
-            if !quiet { print("🤖 Thinking...", to: &standardError) }
-            let output = try await respond(to: prompt, content: stdinContent, quiet: quiet, verbose: verbose)
-            print(output)
-        } catch {
-            print("❌ Generation Error: \(error)", to: &standardError)
-            exit(1)
-        }
-        
-    case .unavailable(let reason):
-        print("❌ Model Unavailable", to: &standardError)
-        print("Reason: \(String(describing: reason))", to: &standardError)
-        exit(1)
-        
-    @unknown default:
-        print("❓ Unknown availability status.", to: &standardError)
-        exit(1)
-    }
-}
+// MARK: - Stderr
 
 private struct StandardError: TextOutputStream {
     mutating func write(_ string: String) {
         FileHandle.standardError.write(Data(string.utf8))
     }
 }
-private var standardError = StandardError()
-
-let task = Task {
-    await runPrompt()
-    exit(0)
-}
-
-dispatchMain()
+nonisolated(unsafe) private var standardError = StandardError()
