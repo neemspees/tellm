@@ -4,6 +4,8 @@ import FoundationModels
 
 @main
 struct Tellm: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(version: version)
+
     @Flag(name: [.long, .short], help: "Suppress status messages.")
     var quiet = false
 

@@ -15,6 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Inject version
+        run: echo 'let version = "${{ github.ref_name }}"' > Sources/tellm/Version.swift
+
       - name: Build
         run: swift build -c release
 
